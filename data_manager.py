@@ -32,7 +32,7 @@ def get_all_contacts():
     if not os.path.exists(CONTACTS_DIR):
         os.makedirs(CONTACTS_DIR)
     
-    contacts = [f.replace(".json", "") for f in os.listdir(CONTACTS_DIR) if f.endswith(".json")]
+    contacts = [f.removesuffix(".json") for f in os.listdir(CONTACTS_DIR) if f.endswith(".json")]
     return sorted(contacts)
 
 def get_contact_path(contact_name):
