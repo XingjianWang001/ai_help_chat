@@ -165,19 +165,25 @@ class ChatMateApp(tk.Tk):
 
     def update_ui_for_contact(self):
         self.clear_suggestions()
-        if not self.contact_data: return
+        self.prompt_text.delete("1.0", tk.END)
+        self.topic_starter_prompt_text.delete("1.0", tk.END)
+        self.history_text.config(state=tk.NORMAL)
+        self.history_text.delete("1.0", tk.END)
+        if not self.contact_data:  # deleted or unreadable: don't keep showing the previous contact
+            self.history_text.config(state=tk.DISABLED)
+            for var in (self.reply_count_var, self.context_lookback_var, self.model_var): var.set("")
+            self.temp_var.set(0.7)
+            self.emo_var.set(False)
+            self.input_entry.delete(0, tk.END)
+            return
         settings = self.contact_data.get("settings", {})
         self.reply_count_var.set(settings.get("reply_count", 3))
         self.context_lookback_var.set(settings.get("context_lookback", 10))
         self.model_var.set(self.resolve_model(settings.get("model_name")))
         self.temp_var.set(settings.get("temperature", 0.7))
         self.emo_var.set(settings.get("emotional_support", False))
-        self.prompt_text.delete("1.0", tk.END)
         self.prompt_text.insert("1.0", self.contact_data.get("prompt", ""))
-        self.topic_starter_prompt_text.delete("1.0", tk.END)
         self.topic_starter_prompt_text.insert("1.0", self.contact_data.get("topic_starter_prompt", data_manager.DEFAULT_TOPIC_STARTER_PROMPT))
-        self.history_text.config(state=tk.NORMAL)
-        self.history_text.delete("1.0", tk.END)
         for msg in self.contact_data.get("history", []):
             align_tag = "user" if msg["role"] == "user" else "assistant"
             self.history_text.insert(tk.END, f"{msg['content']}\n\n", align_tag)
