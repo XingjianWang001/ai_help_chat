@@ -158,6 +158,7 @@ class ChatMateApp(tk.Tk):
     def on_contact_select(self, event):
         selection = self.contacts_listbox.curselection()
         if not selection: return
+        self.save_settings()  # keep unsaved edits to the contact being left
         self.current_contact = self.contacts_listbox.get(selection[0])
         self.contact_data = data_manager.load_contact_data(self.current_contact)
         self.update_ui_for_contact()
@@ -315,6 +316,7 @@ class ChatMateApp(tk.Tk):
         self.clear_suggestions()
 
     def log_assistant_reply(self, reply_content):
+        self.save_settings()  # no early return on failure: callers discard the reply afterwards
         self.contact_data["history"].append({"role": "assistant", "content": reply_content})
         self.save_contact()
         self.update_ui_for_contact()
