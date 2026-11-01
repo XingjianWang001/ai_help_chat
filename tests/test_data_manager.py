@@ -16,6 +16,13 @@ def test_create_contact(contacts_dir):
     assert data_manager.get_all_contacts() == ["小明"]
 
 
+def test_names_containing_json_are_listed_unchanged(contacts_dir):
+    for name in ("notes.json", "a.jsonb"):
+        data_manager.create_new_contact(name)
+
+    assert data_manager.get_all_contacts() == ["a.jsonb", "notes.json"]
+
+
 @pytest.mark.parametrize("name", [
     "../escaped", "a/b", "a\\b", "..", "a:b", "a?b", "a\nb", "CON", "nul", "com1", "a.", "a ",
 ])

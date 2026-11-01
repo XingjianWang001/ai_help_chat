@@ -158,25 +158,37 @@ class ChatMateApp(tk.Tk):
     def on_contact_select(self, event):
         selection = self.contacts_listbox.curselection()
         if not selection: return
+        if self.contact_data and not self.save_settings():
+            # stay on the contact being left so its unsaved edits can be fixed instead of lost
+            names = self.contacts_listbox.get(0, tk.END)
+            self.contacts_listbox.selection_clear(0, tk.END)
+            if self.current_contact in names: self.contacts_listbox.selection_set(names.index(self.current_contact))
+            return
         self.current_contact = self.contacts_listbox.get(selection[0])
         self.contact_data = data_manager.load_contact_data(self.current_contact)
         self.update_ui_for_contact()
 
     def update_ui_for_contact(self):
         self.clear_suggestions()
-        if not self.contact_data: return
+        self.prompt_text.delete("1.0", tk.END)
+        self.topic_starter_prompt_text.delete("1.0", tk.END)
+        self.history_text.config(state=tk.NORMAL)
+        self.history_text.delete("1.0", tk.END)
+        if not self.contact_data:  # deleted or unreadable: don't keep showing the previous contact
+            self.history_text.config(state=tk.DISABLED)
+            for var in (self.reply_count_var, self.context_lookback_var, self.model_var): var.set("")
+            self.temp_var.set(0.7)
+            self.emo_var.set(False)
+            self.input_entry.delete(0, tk.END)
+            return
         settings = self.contact_data.get("settings", {})
         self.reply_count_var.set(settings.get("reply_count", 3))
         self.context_lookback_var.set(settings.get("context_lookback", 10))
         self.model_var.set(self.resolve_model(settings.get("model_name")))
         self.temp_var.set(settings.get("temperature", 0.7))
         self.emo_var.set(settings.get("emotional_support", False))
-        self.prompt_text.delete("1.0", tk.END)
         self.prompt_text.insert("1.0", self.contact_data.get("prompt", ""))
-        self.topic_starter_prompt_text.delete("1.0", tk.END)
         self.topic_starter_prompt_text.insert("1.0", self.contact_data.get("topic_starter_prompt", data_manager.DEFAULT_TOPIC_STARTER_PROMPT))
-        self.history_text.config(state=tk.NORMAL)
-        self.history_text.delete("1.0", tk.END)
         for msg in self.contact_data.get("history", []):
             align_tag = "user" if msg["role"] == "user" else "assistant"
             self.history_text.insert(tk.END, f"{msg['content']}\n\n", align_tag)
@@ -252,7 +264,7 @@ class ChatMateApp(tk.Tk):
     def request_suggestions(self, generate, prompt):
         """Run an API call on a worker thread so the UI stays responsive."""
         context_len = self.contact_data["settings"]["context_lookback"]
-        context = list(self.contact_data["history"][-context_len:]) if context_len > 0 else []
+        context = self.contact_data["history"][-max(1, context_len):]
         settings = dict(self.contact_data["settings"])
         contact = self.current_contact
 
@@ -315,6 +327,7 @@ class ChatMateApp(tk.Tk):
         self.clear_suggestions()
 
     def log_assistant_reply(self, reply_content):
+        self.save_settings()  # no early return on failure: callers discard the reply afterwards
         self.contact_data["history"].append({"role": "assistant", "content": reply_content})
         self.save_contact()
         self.update_ui_for_contact()
