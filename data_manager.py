@@ -6,7 +6,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONTACTS_DIR = os.path.join(SCRIPT_DIR, "contacts")
 
 DEFAULT_PROMPT = "你是一个乐于助人、言简意赅的朋友。"
-DEFAULT_TOPIC_STARTER_PROMPT = "任务：对话陷入了沉默，请根据我们之前的聊天记录，生成 3 个可以用来打破僵局、开启新话题的建议。建议可以是提问、分享一个有趣的事，或者评论一下之前聊过的内容。请确保你的建议是自然的，符合我的人设。"
+DEFAULT_TOPIC_STARTER_PROMPT = "任务：对话陷入了沉默，请根据我们之前的聊天记录，生成一条可以用来打破僵局、开启新话题的消息。可以是提问、分享一个有趣的事，或者评论一下之前聊过的内容。请确保它自然、符合我的人设。"
 
 # Characters that are path separators or not allowed in Windows file names.
 INVALID_NAME_CHARS = set('/\\:*?"<>|')
