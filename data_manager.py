@@ -8,6 +8,25 @@ CONTACTS_DIR = os.path.join(SCRIPT_DIR, "contacts")
 DEFAULT_PROMPT = "你是一个乐于助人、言简意赅的朋友。"
 DEFAULT_TOPIC_STARTER_PROMPT = "任务：对话陷入了沉默，请根据我们之前的聊天记录，生成 3 个可以用来打破僵局、开启新话题的建议。建议可以是提问、分享一个有趣的事，或者评论一下之前聊过的内容。请确保你的建议是自然的，符合我的人设。"
 
+# Characters that are path separators or not allowed in Windows file names.
+INVALID_NAME_CHARS = set('/\\:*?"<>|')
+# Windows treats these as devices, even with an extension (CON.json).
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{p}{i}" for p in ("COM", "LPT") for i in range(1, 10)}
+
+
+def contact_name_error(contact_name):
+    """名称可用作 contacts 目录下的文件名时返回 None，否则返回错误提示。"""
+    if not contact_name.strip():
+        return "好友名称不能为空。"
+    if contact_name in (".", "..") or any(
+        c in INVALID_NAME_CHARS or ord(c) < 32 for c in contact_name
+    ):
+        return '好友名称不能包含 / \\ : * ? " < > | 等字符。'
+    if contact_name.upper() in RESERVED_NAMES or contact_name[-1] in ". ":
+        return "好友名称不能是系统保留名（如 CON、NUL），也不能以点或空格结尾。"
+    return None
+
+
 def get_all_contacts():
     """扫描 contacts 目录，返回所有好友的名称列表。"""
     if not os.path.exists(CONTACTS_DIR):
@@ -52,9 +71,10 @@ def save_contact_data(contact_name, data):
 
 def create_new_contact(contact_name):
     """创建一个新的好友文件，并填入默认数据。"""
-    if not contact_name.strip():
-        return False, "好友名称不能为空。"
-        
+    error = contact_name_error(contact_name)
+    if error:
+        return False, error
+
     filepath = get_contact_path(contact_name)
     if os.path.exists(filepath):
         return False, "该好友已存在。"
@@ -78,9 +98,10 @@ def create_new_contact(contact_name):
 
 def duplicate_contact(source_name, new_name):
     """复制一个已有的好友到新名称。"""
-    if not new_name.strip():
-        return False, "新好友名称不能为空。"
-    
+    error = contact_name_error(new_name)
+    if error:
+        return False, error
+
     new_filepath = get_contact_path(new_name)
     if os.path.exists(new_filepath):
         return False, "该名称的好友已存在。"
