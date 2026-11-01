@@ -48,3 +48,11 @@ def test_rate_limit_is_reported_without_extra_requests(fake_client):
         ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"})
     assert models.candidate_counts == [3]
     assert "m" not in ai_handler._single_candidate_models
+
+
+@pytest.mark.parametrize("reply_count, expected", [(0, 1), (50, 8)])
+def test_reply_count_is_clamped_to_1_to_8(fake_client, reply_count, expected):
+    models = fake_client(api_error(400, "INVALID_ARGUMENT"))
+
+    assert ai_handler._generate("sys", [], {"reply_count": reply_count, "model_name": "m"}) == ["好呀"] * expected
+    assert models.candidate_counts.count(1) == expected  # one parallel request per missing reply

@@ -130,7 +130,7 @@ def _generate(system_instruction, contents, settings):
     """
     client = _client()
     model_name = settings.get("model_name") or MODEL_NAME
-    reply_count = max(1, int(settings.get("reply_count", 3)))
+    reply_count = min(max(1, int(settings.get("reply_count", 3))), 8)  # each missing reply is a parallel request
     temperature = float(settings.get("temperature", 0.7))
 
     def request(n):
