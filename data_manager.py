@@ -61,12 +61,17 @@ def load_contact_data(contact_name):
 def save_contact_data(contact_name, data):
     """将好友数据保存到其 .json 文件中。"""
     filepath = get_contact_path(contact_name)
+    # Write a temp file and swap it in, so a failed or interrupted write never truncates the history.
+    tmp_path = filepath + ".tmp"
     try:
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, filepath)
         return True
     except IOError as e:
         print(f"保存 {contact_name} 的数据时出错: {e}")
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
         return False
 
 def create_new_contact(contact_name):
