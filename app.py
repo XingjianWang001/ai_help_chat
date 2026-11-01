@@ -253,7 +253,7 @@ class ChatMateApp(tk.Tk):
     def request_suggestions(self, generate, prompt):
         """Run an API call on a worker thread so the UI stays responsive."""
         context_len = self.contact_data["settings"]["context_lookback"]
-        context = list(self.contact_data["history"][-context_len:]) if context_len > 0 else []
+        context = self.contact_data["history"][-max(1, context_len):]
         settings = dict(self.contact_data["settings"])
         contact = self.current_contact
 
