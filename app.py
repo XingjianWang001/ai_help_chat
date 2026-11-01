@@ -220,11 +220,16 @@ class ChatMateApp(tk.Tk):
             self.contact_data["settings"]["emotional_support"] = bool(self.emo_var.get())
             self.contact_data["prompt"] = self.prompt_text.get("1.0", tk.END).strip()
             self.contact_data["topic_starter_prompt"] = self.topic_starter_prompt_text.get("1.0", tk.END).strip()
-            data_manager.save_contact_data(self.current_contact, self.contact_data)
-            return True
+            return self.save_contact()
         except Exception as e:
             messagebox.showerror("错误", f"保存设置失败: {e}")
             return False
+
+    def save_contact(self):
+        if data_manager.save_contact_data(self.current_contact, self.contact_data):
+            return True
+        messagebox.showerror("错误", "保存失败，聊天记录没有写入磁盘。请检查磁盘空间或文件权限。")
+        return False
 
     def send_message(self, event=None):
         user_input = self.input_entry.get().strip()
@@ -232,7 +237,7 @@ class ChatMateApp(tk.Tk):
         if not self.save_settings(): return
 
         self.contact_data["history"].append({"role": "user", "content": user_input})
-        data_manager.save_contact_data(self.current_contact, self.contact_data)
+        self.save_contact()
         self.update_ui_for_contact()
         self.input_entry.delete(0, tk.END)
 
@@ -311,7 +316,7 @@ class ChatMateApp(tk.Tk):
 
     def log_assistant_reply(self, reply_content):
         self.contact_data["history"].append({"role": "assistant", "content": reply_content})
-        data_manager.save_contact_data(self.current_contact, self.contact_data)
+        self.save_contact()
         self.update_ui_for_contact()
 
     def open_global_settings(self):

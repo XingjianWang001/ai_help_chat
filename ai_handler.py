@@ -4,7 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
@@ -147,7 +147,11 @@ def _generate(system_instruction, contents, settings):
     if reply_count > 1 and model_name not in _single_candidate_models:
         try:
             texts = request(reply_count)
-        except Exception as e:
+        except errors.ClientError as e:
+            # Only a rejected request (400) means the model can't do candidate_count > 1;
+            # retrying a quota error (429) as several requests would only make it worse.
+            if e.code != 400:
+                raise
             print(f"多候选请求失败，改为逐条请求: {e!r}")
             _single_candidate_models.add(model_name)
 
