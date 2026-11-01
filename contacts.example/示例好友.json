@@ -1,0 +1,25 @@
+{
+  "prompt": "对方是我的高中同学小林，现在在外地读书，我们偶尔聊聊近况。回复要简短、轻松，十到三十字之间。",
+  "topic_starter_prompt": "任务：对话陷入了沉默，请根据我们之前的聊天记录，生成一条可以用来打破僵局、开启新话题的消息。可以是提问、分享一个有趣的事，或者评论一下之前聊过的内容。请确保它自然、符合我的人设。",
+  "settings": {
+    "reply_count": 3,
+    "context_lookback": 10,
+    "model_name": "gemini-flash-latest",
+    "temperature": 0.7,
+    "emotional_support": false
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "最近忙啥呢？好久没聊了"
+    },
+    {
+      "role": "assistant",
+      "content": "期末周，天天泡图书馆，人都快没了"
+    },
+    {
+      "role": "user",
+      "content": "哈哈我也是，考完寒假回来聚一下？"
+    }
+  ]
+}
