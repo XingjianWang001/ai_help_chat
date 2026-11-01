@@ -158,7 +158,12 @@ class ChatMateApp(tk.Tk):
     def on_contact_select(self, event):
         selection = self.contacts_listbox.curselection()
         if not selection: return
-        self.save_settings()  # keep unsaved edits to the contact being left
+        if self.contact_data and not self.save_settings():
+            # stay on the contact being left so its unsaved edits can be fixed instead of lost
+            names = self.contacts_listbox.get(0, tk.END)
+            self.contacts_listbox.selection_clear(0, tk.END)
+            if self.current_contact in names: self.contacts_listbox.selection_set(names.index(self.current_contact))
+            return
         self.current_contact = self.contacts_listbox.get(selection[0])
         self.contact_data = data_manager.load_contact_data(self.current_contact)
         self.update_ui_for_contact()
