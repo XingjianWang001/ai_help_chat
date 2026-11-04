@@ -108,6 +108,7 @@ class ChatMateApp(tk.Tk):
         manual_reply_frame.pack(fill=tk.X, padx=5, side=tk.BOTTOM)
         self.paned_window.add(suggestions_frame, weight=2)
 
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.refresh_contacts_list()
         threading.Thread(target=self._fetch_models, daemon=True).start()
         self.poll_ui_queue()
@@ -160,13 +161,19 @@ class ChatMateApp(tk.Tk):
         if not selection: return
         if self.contact_data and not self.save_settings():
             # stay on the contact being left so its unsaved edits can be fixed instead of lost
-            names = self.contacts_listbox.get(0, tk.END)
-            self.contacts_listbox.selection_clear(0, tk.END)
-            if self.current_contact in names: self.contacts_listbox.selection_set(names.index(self.current_contact))
-            return
-        self.current_contact = self.contacts_listbox.get(selection[0])
-        self.contact_data = data_manager.load_contact_data(self.current_contact)
+            return self.reselect_current_contact()
+        name = self.contacts_listbox.get(selection[0])
+        data = data_manager.load_contact_data(name)
+        if data is None:
+            messagebox.showerror("错误", f"无法读取好友 '{name}' 的数据，文件可能已损坏。")
+            return self.reselect_current_contact()
+        self.current_contact, self.contact_data = name, data
         self.update_ui_for_contact()
+
+    def reselect_current_contact(self):
+        names = self.contacts_listbox.get(0, tk.END)
+        self.contacts_listbox.selection_clear(0, tk.END)
+        if self.current_contact in names: self.contacts_listbox.selection_set(names.index(self.current_contact))
 
     def update_ui_for_contact(self):
         self.clear_suggestions()
@@ -206,6 +213,7 @@ class ChatMateApp(tk.Tk):
         if not self.current_contact: return
         name = simpledialog.askstring("复制好友", f"为 '{self.current_contact}' 的副本输入新名称:", parent=self)
         if name:
+            if not self.save_settings(): return  # the copy is read from disk, so write pending edits first
             success, msg = data_manager.duplicate_contact(self.current_contact, name)
             if success: self.refresh_contacts_list(select_contact=name)
             else: messagebox.showerror("错误", msg)
@@ -221,17 +229,42 @@ class ChatMateApp(tk.Tk):
                 self.update_ui_for_contact()
             else: messagebox.showerror("错误", msg)
 
+    def ui_values(self):
+        """The contact fields as the UI shows them; raises if a number field can't be parsed."""
+        settings = dict(self.contact_data["settings"])
+        settings["reply_count"] = int(self.reply_count_var.get())
+        settings["context_lookback"] = int(self.context_lookback_var.get())
+        settings["temperature"] = float(self.temp_var.get())
+        settings["emotional_support"] = bool(self.emo_var.get())
+        # Only pin a model that differs from the global default, so contacts follow later default changes.
+        settings.pop("model_name", None)
+        if self.model_var.get() not in ("", ai_handler.MODEL_NAME): settings["model_name"] = self.model_var.get()
+        return {
+            "settings": settings,
+            "prompt": self.prompt_text.get("1.0", tk.END).strip(),
+            "topic_starter_prompt": self.topic_starter_prompt_text.get("1.0", tk.END).strip(),
+        }
+
+    def has_unsaved_changes(self):
+        try:
+            values = self.ui_values()
+        except Exception:
+            return True  # unparsable input is an edit the user should be asked about
+        def effective(d):  # older contacts store the default model explicitly
+            return {**d, "settings": {**d["settings"], "model_name": d["settings"].get("model_name") or ai_handler.MODEL_NAME}}
+        return effective(values) != effective({k: self.contact_data[k] for k in values})
+
+    def on_close(self):
+        if self.contact_data and self.has_unsaved_changes():
+            answer = messagebox.askyesnocancel("保存更改", f"是否保存对 '{self.current_contact}' 的更改？", parent=self)
+            if answer is None: return
+            if answer and not self.save_settings(): return
+        self.destroy()
+
     def save_settings(self):
         if not self.contact_data: return False
         try:
-            self.contact_data.setdefault("settings", {})
-            self.contact_data["settings"]["reply_count"] = int(self.reply_count_var.get())
-            self.contact_data["settings"]["context_lookback"] = int(self.context_lookback_var.get())
-            self.contact_data["settings"]["model_name"] = self.model_var.get()
-            self.contact_data["settings"]["temperature"] = float(self.temp_var.get())
-            self.contact_data["settings"]["emotional_support"] = bool(self.emo_var.get())
-            self.contact_data["prompt"] = self.prompt_text.get("1.0", tk.END).strip()
-            self.contact_data["topic_starter_prompt"] = self.topic_starter_prompt_text.get("1.0", tk.END).strip()
+            self.contact_data.update(self.ui_values())
             return self.save_contact()
         except Exception as e:
             messagebox.showerror("错误", f"保存设置失败: {e}")

@@ -60,3 +60,18 @@ def test_failed_save_keeps_previous_file(contacts_dir, monkeypatch):
     assert data_manager.load_contact_data("小明")["history"] == [{"role": "user", "content": "你好"}]
     assert data_manager.get_all_contacts() == ["小明"]
     assert [p.name for p in contacts_dir.iterdir()] == ["小明.json"]
+
+
+@pytest.mark.parametrize("content", [b"\xff\xfe not utf-8", b"[]", b"null", b'"text"'])
+def test_unreadable_or_non_object_file_loads_as_none(contacts_dir, content):
+    (contacts_dir / "小明.json").write_bytes(content)
+
+    assert data_manager.load_contact_data("小明") is None
+
+
+def test_null_history_and_settings_load_as_empty(contacts_dir):
+    (contacts_dir / "小明.json").write_text('{"history": null, "settings": null}', encoding="utf-8")
+
+    data = data_manager.load_contact_data("小明")
+
+    assert data["history"] == [] and data["settings"] == {}

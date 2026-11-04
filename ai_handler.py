@@ -158,8 +158,13 @@ def _generate(system_instruction, contents, settings):
     missing = reply_count - len(texts)
     if missing > 0:
         with ThreadPoolExecutor(max_workers=missing) as pool:
-            for result in pool.map(lambda _: request(1), range(missing)):
-                texts.extend(result)
+            futures = [pool.submit(request, 1) for _ in range(missing)]
+        failures = [f.exception() for f in futures if f.exception()]
+        for f in futures:
+            if not f.exception(): texts.extend(f.result())
+        if failures:
+            if not texts: raise failures[0]  # keep the replies we got; fail only if there are none
+            print(f"{len(failures)} 条回复请求失败: {failures[0]!r}")
     return texts[:reply_count]
 
 
