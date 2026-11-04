@@ -48,16 +48,18 @@ def load_contact_data(contact_name):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        # Older contact files may lack some keys.
-        data.setdefault("prompt", DEFAULT_PROMPT)
-        data.setdefault("topic_starter_prompt", DEFAULT_TOPIC_STARTER_PROMPT)
-        data.setdefault("settings", {})
-        data.setdefault("history", [])
-        return data
-    except (json.JSONDecodeError, IOError) as e:
+    except (ValueError, OSError) as e:  # ValueError covers bad JSON and non-UTF-8 files
         print(f"读取 {contact_name} 的数据时出错: {e}")
         return None
-
+    if not isinstance(data, dict):
+        print(f"读取 {contact_name} 的数据时出错: 文件内容不是 JSON 对象")
+        return None
+    # Older contact files may lack some keys.
+    data.setdefault("prompt", DEFAULT_PROMPT)
+    data.setdefault("topic_starter_prompt", DEFAULT_TOPIC_STARTER_PROMPT)
+    if not isinstance(data.get("settings"), dict): data["settings"] = {}
+    if not isinstance(data.get("history"), list): data["history"] = []
+    return data
 def save_contact_data(contact_name, data):
     """将好友数据保存到其 .json 文件中。"""
     filepath = get_contact_path(contact_name)
