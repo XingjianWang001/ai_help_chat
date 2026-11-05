@@ -387,7 +387,10 @@ class GlobalSettingsWindow(tk.Toplevel):
         Button(self, text="保存全局设置", command=self.save_settings).pack(pady=10)
     def save_settings(self):
         try:
+            old_default = ai_handler.MODEL_NAME
             ai_handler.save_app_config(self.model_var.get(), self.prompt_text.get("1.0", tk.END).strip())
+            # A contact shown on the old default follows the new one; left as is, its next save would pin the old model.
+            if self.controller.model_var.get() == old_default: self.controller.model_var.set(ai_handler.MODEL_NAME)
             messagebox.showinfo("成功", "全局设置已保存。", parent=self)
             self.destroy()
         except Exception as e: messagebox.showerror("错误", f"保存失败: {e}", parent=self)
