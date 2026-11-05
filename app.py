@@ -97,6 +97,8 @@ class ChatMateApp(tk.Tk):
         self.send_button.pack(side=tk.RIGHT, padx=5)
         self.topic_button = Button(input_frame, text="开启新话题", command=self.get_topic_starters)
         self.topic_button.pack(side=tk.RIGHT)
+        self.undo_button = Button(input_frame, text="撤销最后一条", command=self.undo_last_entry)
+        self.undo_button.pack(side=tk.RIGHT, padx=5)
         input_frame.pack(fill=tk.X, padx=5, pady=5)
         self.paned_window.add(chat_frame, weight=3)
 
@@ -326,6 +328,7 @@ class ChatMateApp(tk.Tk):
         state = tk.DISABLED if busy else tk.NORMAL
         self.send_button.config(state=state)
         self.topic_button.config(state=state)
+        self.undo_button.config(state=state)  # suggestions in flight were made for the current history
         if busy:
             self.clear_suggestions()
             Label(self.suggestions_container, text="生成中…").pack()
@@ -351,6 +354,19 @@ class ChatMateApp(tk.Tk):
         pyperclip.copy(suggestion)
         self.log_assistant_reply(suggestion)
         self.clear_suggestions()
+
+    def undo_last_entry(self):
+        if self.busy or not self.contact_data or not self.contact_data["history"]: return
+        last = self.contact_data["history"][-1]
+        preview = last["content"] if len(last["content"]) <= 100 else last["content"][:100] + "…"
+        if not messagebox.askyesno("撤销", f"删除最后一条聊天记录？\n\n{preview}", parent=self): return
+        if not self.save_settings(): return  # update_ui_for_contact would otherwise drop unsaved setting edits
+        self.contact_data["history"].pop()
+        if not self.save_contact():
+            self.contact_data["history"].append(last)
+            return
+        self.clear_suggestions()
+        self.update_ui_for_contact()
 
     def send_manual_reply(self):
         reply_text = self.manual_reply_text.get("1.0", tk.END).strip()
