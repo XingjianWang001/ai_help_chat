@@ -368,6 +368,7 @@ class ChatMateApp(tk.Tk):
     def open_global_settings(self):
         # A second window would save its own stale copy over the first one's changes.
         if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.deiconify()
             self.settings_window.lift()
             return
         self.settings_window = GlobalSettingsWindow(self)

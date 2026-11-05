@@ -49,6 +49,9 @@ def load_app_config():
                 config = json.load(f)
         except (ValueError, OSError) as e:  # ValueError covers bad JSON and non-UTF-8 files
             print(f"读取 config.json 时出错: {e}")
+        if not isinstance(config, dict):
+            print("读取 config.json 时出错: 文件内容不是 JSON 对象")
+            config = {}
 
     API_KEY = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key")
     if API_KEY == "YOUR_API_KEY_HERE":

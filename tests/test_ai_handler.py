@@ -131,8 +131,9 @@ def test_config_saved_with_a_bom_is_read(config_file):  # older Windows Notepad 
     assert ai_handler.API_KEY == "AIza-real"
 
 
-def test_config_in_a_non_utf8_encoding_does_not_stop_the_app(config_file):
-    config_file.write_bytes(json.dumps(CONFIG, ensure_ascii=False).encode("gbk"))
+@pytest.mark.parametrize("content", [json.dumps(CONFIG, ensure_ascii=False).encode("gbk"), b"[]"], ids=["gbk", "not an object"])
+def test_unreadable_config_does_not_stop_the_app(config_file, content):
+    config_file.write_bytes(content)
 
     ai_handler.load_app_config()  # also runs on `import ai_handler`, i.e. at app start
 
