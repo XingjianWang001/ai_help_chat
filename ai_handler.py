@@ -45,10 +45,13 @@ def load_app_config():
     config = {}
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:  # -sig: Notepad may add a BOM
                 config = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
+        except (ValueError, OSError) as e:  # ValueError covers bad JSON and non-UTF-8 files
             print(f"读取 config.json 时出错: {e}")
+        if not isinstance(config, dict):
+            print("读取 config.json 时出错: 文件内容不是 JSON 对象")
+            config = {}
 
     API_KEY = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key")
     if API_KEY == "YOUR_API_KEY_HERE":
@@ -61,13 +64,20 @@ def save_app_config(model_name, global_prompt):
     """Persist global settings, keeping any other keys (e.g. the API key) intact."""
     config = {}
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
             config = json.load(f)
     config.setdefault("gemini_api_key", "YOUR_API_KEY_HERE")
     config["model_name"] = model_name
     config["global_prompt"] = global_prompt
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    # Write a temp file and swap it in, so a failed write never truncates the API key.
+    tmp_path = CONFIG_FILE + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, CONFIG_FILE)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
     load_app_config()
 
 
@@ -152,6 +162,8 @@ def _generate(system_instruction, contents, settings):
             # retrying a quota error (429) as several requests would only make it worse.
             if e.code != 400:
                 raise
+            # A bad key or prompt is also a 400; only a single-candidate request that works blames candidate_count.
+            texts = request(1)
             print(f"多候选请求失败，改为逐条请求: {e!r}")
             _single_candidate_models.add(model_name)
 

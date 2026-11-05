@@ -57,3 +57,34 @@ def test_contact_on_its_own_model_keeps_it_when_the_default_changes(chat):
 
     assert chat.save_settings()
     assert data_manager.load_contact_data("小红")["settings"]["model_name"] == OTHER
+
+
+def test_contact_pinned_to_a_model_keeps_it_while_the_default_matches(chat):
+    open_contact(chat, "小红")
+    chat.model_var.set(OTHER)
+    chat.save_settings()
+
+    change_default_model(chat, OTHER)
+    chat.refresh_contacts_list(select_contact="小红")
+    assert chat.save_settings()
+    change_default_model(chat, OLD_DEFAULT)
+
+    assert chat.save_settings()
+    assert data_manager.load_contact_data("小红")["settings"]["model_name"] == OTHER
+
+
+def test_contact_following_the_default_stays_unpinned_when_the_model_list_arrives(chat):
+    open_contact(chat, "小明")
+
+    chat._apply_models([NEW_DEFAULT, OTHER])  # the configured default is no longer offered
+
+    assert chat.save_settings()
+    assert "model_name" not in data_manager.load_contact_data("小明")["settings"]
+
+
+def test_second_settings_click_reuses_the_open_window(chat):
+    chat.open_global_settings()
+    first = chat.settings_window
+    chat.open_global_settings()
+
+    assert chat.settings_window is first
