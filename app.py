@@ -8,6 +8,9 @@ import pyperclip
 import ai_handler
 import data_manager
 
+# Contact model menu entry meaning "no model_name saved": the contact uses whatever the global default is.
+FOLLOW_DEFAULT = "跟随全局默认"
+
 class ChatMateApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -20,6 +23,7 @@ class ChatMateApp(tk.Tk):
         self.MODELS = list(ai_handler.FALLBACK_MODELS)
         self.models_from_api = False
         self.busy = False
+        self.settings_window = None
         # Worker threads must not touch Tk; they post callbacks here instead.
         self.ui_queue = queue.Queue()
 
@@ -57,7 +61,7 @@ class ChatMateApp(tk.Tk):
         s_frame2 = Frame(settings_container)
         Label(s_frame2, text="模型:").pack(side=tk.LEFT)
         self.model_var = StringVar()
-        self.model_menu = OptionMenu(s_frame2, self.model_var, *self.MODELS)
+        self.model_menu = OptionMenu(s_frame2, self.model_var, FOLLOW_DEFAULT, *self.MODELS)
         self.model_menu.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
         s_frame2.pack(fill=tk.X, pady=2)
 
@@ -134,18 +138,17 @@ class ChatMateApp(tk.Tk):
             models.insert(0, ai_handler.DEFAULT_MODEL)
         self.MODELS = models
         self.models_from_api = True
-        set_option_menu_items(self.model_menu, self.model_var, self.MODELS)
+        set_option_menu_items(self.model_menu, self.model_var, [FOLLOW_DEFAULT, *self.MODELS])
         if self.model_var.get():
             self.model_var.set(self.resolve_model(self.model_var.get()))
 
     def resolve_model(self, model_name):
-        """Fall back to the default model if the saved one is no longer offered by the API."""
-        if not model_name:
-            return ai_handler.MODEL_NAME
+        """The contact's menu value: its pinned model, or FOLLOW_DEFAULT if none is pinned or the API no longer offers it."""
+        if model_name in (None, "", FOLLOW_DEFAULT):
+            return FOLLOW_DEFAULT
         if self.models_from_api and model_name not in self.MODELS:
-            fallback = ai_handler.MODEL_NAME if ai_handler.MODEL_NAME in self.MODELS else ai_handler.DEFAULT_MODEL
-            print(f"模型 {model_name} 已不可用，改用 {fallback}")
-            return fallback
+            print(f"模型 {model_name} 已不可用，改用全局默认模型")
+            return FOLLOW_DEFAULT
         return model_name
 
     def refresh_contacts_list(self, select_contact=None):
@@ -238,9 +241,8 @@ class ChatMateApp(tk.Tk):
         settings["context_lookback"] = int(self.context_lookback_var.get())
         settings["temperature"] = float(self.temp_var.get())
         settings["emotional_support"] = bool(self.emo_var.get())
-        # Only pin a model that differs from the global default, so contacts follow later default changes.
         settings.pop("model_name", None)
-        if self.model_var.get() not in ("", ai_handler.MODEL_NAME): settings["model_name"] = self.model_var.get()
+        if self.model_var.get() not in ("", FOLLOW_DEFAULT): settings["model_name"] = self.model_var.get()
         return {
             "settings": settings,
             "prompt": self.prompt_text.get("1.0", tk.END).strip(),
@@ -252,9 +254,7 @@ class ChatMateApp(tk.Tk):
             values = self.ui_values()
         except Exception:
             return True  # unparsable input is an edit the user should be asked about
-        def effective(d):  # older contacts store the default model explicitly
-            return {**d, "settings": {**d["settings"], "model_name": d["settings"].get("model_name") or ai_handler.MODEL_NAME}}
-        return effective(values) != effective({k: self.contact_data[k] for k in values})
+        return values != {k: self.contact_data[k] for k in values}
 
     def on_close(self):
         if self.contact_data and self.has_unsaved_changes():
@@ -382,7 +382,12 @@ class ChatMateApp(tk.Tk):
         self.update_ui_for_contact()
 
     def open_global_settings(self):
-        GlobalSettingsWindow(self)
+        # A second window would save its own stale copy over the first one's changes.
+        if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.deiconify()
+            self.settings_window.lift()
+            return
+        self.settings_window = GlobalSettingsWindow(self)
 
 class GlobalSettingsWindow(tk.Toplevel):
     def __init__(self, controller):
@@ -393,7 +398,8 @@ class GlobalSettingsWindow(tk.Toplevel):
         ai_handler.load_app_config()
         model_frame = Frame(self, pady=10)
         Label(model_frame, text="默认 Gemini 模型:").pack(side=tk.LEFT, padx=5)
-        self.model_var = StringVar(value=controller.resolve_model(ai_handler.MODEL_NAME))
+        offered = not controller.models_from_api or ai_handler.MODEL_NAME in controller.MODELS
+        self.model_var = StringVar(value=ai_handler.MODEL_NAME if offered else ai_handler.DEFAULT_MODEL)
         OptionMenu(model_frame, self.model_var, *self.controller.MODELS).pack(side=tk.LEFT)
         model_frame.pack(fill=tk.X, padx=10)
         Label(self, text="全局提示词 (定义你的通用人设):").pack(anchor=tk.W, padx=10)
@@ -403,10 +409,7 @@ class GlobalSettingsWindow(tk.Toplevel):
         Button(self, text="保存全局设置", command=self.save_settings).pack(pady=10)
     def save_settings(self):
         try:
-            old_default = ai_handler.MODEL_NAME
             ai_handler.save_app_config(self.model_var.get(), self.prompt_text.get("1.0", tk.END).strip())
-            # A contact shown on the old default follows the new one; left as is, its next save would pin the old model.
-            if self.controller.model_var.get() == old_default: self.controller.model_var.set(ai_handler.MODEL_NAME)
             messagebox.showinfo("成功", "全局设置已保存。", parent=self)
             self.destroy()
         except Exception as e: messagebox.showerror("错误", f"保存失败: {e}", parent=self)

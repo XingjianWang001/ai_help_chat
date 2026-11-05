@@ -73,10 +73,10 @@ cp contacts.example/*.json contacts/
 | | 主动破冰提示词 (Topic starter prompt) | Instructions used by **开启新话题** (New topic) |
 | | 回复数 (Reply count) | Number of suggestions to generate |
 | | 上下文 (Context) | Number of recent messages sent to the model |
-| | 模型 / 创造力 (Model / Creativity) | Model and temperature (0–1) for this friend |
+| | 模型 / 创造力 (Model / Creativity) | Model and temperature (0–1) for this friend; 跟随全局默认 (follow global default) uses the default model, including after you change it |
 | | 情感支持模式 (Emotional support mode) | Adds an empathy-first instruction |
 
-If a saved model is no longer offered by the API, ChatMate falls back to the default model.
+If a friend's model is no longer offered by the API, that friend falls back to 跟随全局默认.
 
 ## Project structure
 

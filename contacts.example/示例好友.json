@@ -4,7 +4,6 @@
   "settings": {
     "reply_count": 3,
     "context_lookback": 10,
-    "model_name": "gemini-flash-latest",
     "temperature": 0.7,
     "emotional_support": false
   },
