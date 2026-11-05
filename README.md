@@ -12,6 +12,7 @@ Built with Python and Tkinter. The interface is in Chinese.
 - **Global persona.** One global prompt describes who "you" are. It is combined with each friend's prompt.
 - **Multiple reply suggestions.** Choose how many drafts to generate and how creative they should be. One click copies a draft to the clipboard and logs it to the history.
 - **Topic starters.** Generate an icebreaker based on the conversation so far.
+- **Undo.** 撤销最后一条 (undo last entry) removes the last history entry, e.g. a draft picked by mistake or a message pasted into the wrong friend, so it isn't sent to the model again.
 - **Emotional support mode.** Tells the model to listen and empathise first, rather than lecture or jump to solutions.
 - **Adjustable context window.** Choose how many past messages are sent to the model.
 - **Live model list.** Available Gemini models are fetched from the API at startup, with a built-in fallback list.

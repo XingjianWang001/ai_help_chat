@@ -57,3 +57,43 @@ def test_contact_on_its_own_model_keeps_it_when_the_default_changes(chat):
 
     assert chat.save_settings()
     assert data_manager.load_contact_data("小红")["settings"]["model_name"] == OTHER
+
+
+def open_contact_with_history(chat, name, *contents):
+    open_contact(chat, name)
+    for i, content in enumerate(contents):
+        chat.contact_data["history"].append({"role": "user" if i % 2 == 0 else "assistant", "content": content})
+    chat.save_contact()
+
+
+def test_undo_removes_the_last_history_entry_and_keeps_setting_edits(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "askyesno", lambda *a, **k: True)
+    open_contact_with_history(chat, "小明", "在吗", "在的")
+    chat.prompt_text.insert("1.0", "新的提示词")
+
+    chat.undo_last_entry()
+
+    saved = data_manager.load_contact_data("小明")
+    assert [m["content"] for m in saved["history"]] == ["在吗"]
+    assert saved["prompt"].startswith("新的提示词")
+    assert "在的" not in chat.history_text.get("1.0", tk.END)
+
+
+def test_undo_does_nothing_when_declined(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "askyesno", lambda *a, **k: False)
+    open_contact_with_history(chat, "小明", "在吗")
+
+    chat.undo_last_entry()
+
+    assert len(data_manager.load_contact_data("小明")["history"]) == 1
+
+
+def test_undo_keeps_the_entry_when_the_save_fails(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "askyesno", lambda *a, **k: True)
+    monkeypatch.setattr(app.messagebox, "showerror", lambda *a, **k: None)
+    open_contact_with_history(chat, "小明", "在吗")
+    monkeypatch.setattr(data_manager, "save_contact_data", lambda *a: False)
+
+    chat.undo_last_entry()
+
+    assert [m["content"] for m in chat.contact_data["history"]] == ["在吗"]
