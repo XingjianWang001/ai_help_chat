@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from google.genai import errors, types
 
@@ -87,3 +89,66 @@ def test_error_is_raised_when_every_single_request_fails(monkeypatch):
 
     with pytest.raises(errors.ClientError):
         ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"})
+
+
+class RejectAllModels(FakeModels):
+    """Every request fails with a 400, as with an invalid API key."""
+
+    def generate_content(self, model, contents, config):
+        self.candidate_counts.append(config.candidate_count)
+        raise api_error(400, "INVALID_ARGUMENT")
+
+
+def test_a_400_that_single_requests_also_get_is_raised_without_marking_the_model(monkeypatch):
+    models = RejectAllModels(None)
+    monkeypatch.setattr(ai_handler, "_client", lambda: type("Client", (), {"models": models})())
+    monkeypatch.setattr(ai_handler, "_single_candidate_models", set())
+
+    with pytest.raises(errors.ClientError):
+        ai_handler._generate("sys", [], {"reply_count": 8, "model_name": "m"})
+    assert models.candidate_counts == [8, 1]
+    assert "m" not in ai_handler._single_candidate_models
+
+
+@pytest.fixture
+def config_file(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(ai_handler, "CONFIG_FILE", str(path))
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    for name in ("API_KEY", "GLOBAL_PROMPT", "MODEL_NAME"):  # load_app_config rewrites these globals
+        monkeypatch.setattr(ai_handler, name, getattr(ai_handler, name))
+    return path
+
+
+CONFIG = {"gemini_api_key": "AIza-real", "model_name": "gemini-flash-latest", "global_prompt": "我是一名大学生"}
+
+
+def test_config_saved_with_a_bom_is_read(config_file):  # older Windows Notepad adds one
+    config_file.write_bytes(json.dumps(CONFIG, ensure_ascii=False).encode("utf-8-sig"))
+
+    ai_handler.load_app_config()
+
+    assert ai_handler.API_KEY == "AIza-real"
+
+
+def test_config_in_a_non_utf8_encoding_does_not_stop_the_app(config_file):
+    config_file.write_bytes(json.dumps(CONFIG, ensure_ascii=False).encode("gbk"))
+
+    ai_handler.load_app_config()  # also runs on `import ai_handler`, i.e. at app start
+
+    assert ai_handler.API_KEY is None
+
+
+def test_failed_config_save_keeps_the_api_key(config_file, monkeypatch):
+    config_file.write_text(json.dumps(CONFIG), encoding="utf-8")
+
+    def disk_full(obj, f, **kwargs):  # write part of the file, then the disk fills up
+        f.write("{")
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(ai_handler.json, "dump", disk_full)
+    with pytest.raises(OSError):
+        ai_handler.save_app_config("gemini-3.8-flash", "新的人设")
+
+    assert json.loads(config_file.read_text(encoding="utf-8")) == CONFIG
+    assert [p.name for p in config_file.parent.iterdir()] == ["config.json"]
