@@ -7,18 +7,20 @@ import ai_handler
 
 
 class FakeModels:
-    """Rejects candidate_count > 1 with `multi_error`; answers single-candidate requests."""
+    """A candidate_count > 1 request raises `multi` if it is an error, else returns `multi` replies
+    (0: the prompt was blocked, so there are no candidates); single-candidate requests return one."""
 
-    def __init__(self, multi_error):
-        self.multi_error = multi_error
+    def __init__(self, multi):
+        self.multi = multi
         self.candidate_counts = []
 
     def generate_content(self, model, contents, config):
         self.candidate_counts.append(config.candidate_count)
-        if config.candidate_count > 1:
-            raise self.multi_error
+        replies = 1 if config.candidate_count == 1 else self.multi
+        if isinstance(replies, Exception):
+            raise replies
         content = types.Content(role="model", parts=[types.Part(text="好呀")])
-        return types.GenerateContentResponse(candidates=[types.Candidate(content=content)])
+        return types.GenerateContentResponse(candidates=[types.Candidate(content=content)] * replies or None)
 
 
 @pytest.fixture
@@ -50,6 +52,24 @@ def test_rate_limit_is_reported_without_extra_requests(fake_client):
         ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"})
     assert models.candidate_counts == [3]
     assert "m" not in ai_handler._single_candidate_models
+
+
+# One click must cost at most one request per reply asked for, whatever the first answer was (PR #2, #10).
+@pytest.mark.parametrize("multi, requests", [
+    (3, [3]),
+    (1, [3]),  # some candidates were filtered out
+    (0, [3]),  # the prompt was blocked: single requests would be blocked too
+    (api_error(400, "INVALID_ARGUMENT"), [3, 1, 1, 1]),
+    (api_error(429, "RESOURCE_EXHAUSTED"), [3]),
+], ids=["full", "partial", "blocked", "candidate_count rejected", "rate limited"])
+def test_one_click_sends_at_most_one_request_per_reply(fake_client, multi, requests):
+    models = fake_client(multi)
+
+    try:
+        ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"})
+    except errors.ClientError:
+        pass
+    assert models.candidate_counts == requests
 
 
 @pytest.mark.parametrize("reply_count, expected", [(0, 1), (50, 8)])
@@ -153,3 +173,20 @@ def test_failed_config_save_keeps_the_api_key(config_file, monkeypatch):
 
     assert json.loads(config_file.read_text(encoding="utf-8")) == CONFIG
     assert [p.name for p in config_file.parent.iterdir()] == ["config.json"]
+
+
+def test_saving_keeps_a_private_config_private(config_file):
+    config_file.write_text(json.dumps(CONFIG), encoding="utf-8")
+    config_file.chmod(0o600)  # the file holds the API key
+
+    ai_handler.save_app_config("gemini-3.8-flash", "新的人设")
+
+    assert config_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_null_global_prompt_reads_as_empty(config_file):
+    config_file.write_text(json.dumps({**CONFIG, "global_prompt": None}), encoding="utf-8")
+
+    ai_handler.load_app_config()
+
+    assert ai_handler.GLOBAL_PROMPT == ""
