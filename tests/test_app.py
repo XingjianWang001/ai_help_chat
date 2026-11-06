@@ -32,6 +32,12 @@ def open_contact(chat, name):
     chat.refresh_contacts_list(select_contact=name)
 
 
+def select(chat, name):
+    chat.contacts_listbox.selection_clear(0, tk.END)
+    chat.contacts_listbox.selection_set(chat.contacts_listbox.get(0, tk.END).index(name))
+    chat.on_contact_select(None)
+
+
 def change_default_model(chat, model):
     window = app.GlobalSettingsWindow(chat)
     window.model_var.set(model)
@@ -64,8 +70,9 @@ def test_contact_pinned_to_a_model_keeps_it_while_the_default_matches(chat):
     chat.model_var.set(OTHER)
     chat.save_settings()
 
+    open_contact(chat, "小明")
     change_default_model(chat, OTHER)
-    chat.refresh_contacts_list(select_contact="小红")
+    select(chat, "小红")  # reopen her while the default matches her model
     assert chat.save_settings()
     change_default_model(chat, OLD_DEFAULT)
 
@@ -128,3 +135,62 @@ def test_undo_keeps_the_entry_when_the_save_fails(chat, monkeypatch):
     chat.undo_last_entry()
 
     assert [m["content"] for m in chat.contact_data["history"]] == ["在吗"]
+
+
+# Every action that ends in update_ui_for_contact must save the edits first, or stop when it can't.
+ACTIONS = {
+    "switch contact": lambda chat: select(chat, "小红"),
+    "duplicate": lambda chat: chat.duplicate_contact(),
+    "send": lambda chat: (chat.input_entry.insert(0, "在吗"), chat.send_message()),
+    "topic starters": lambda chat: chat.get_topic_starters(),
+    "copy a suggestion": lambda chat: chat.copy_and_log("好的"),
+    "manual reply": lambda chat: (chat.manual_reply_text.insert("1.0", "好的"), chat.send_manual_reply()),
+    "undo": lambda chat: chat.undo_last_entry(),
+    "close": lambda chat: chat.on_close(),
+}
+
+
+@pytest.mark.parametrize("action", ACTIONS.values(), ids=ACTIONS.keys())
+def test_no_action_drops_a_prompt_edit_while_a_number_field_is_unparsable(chat, monkeypatch, action):
+    for dialog in ("askyesno", "askyesnocancel"):
+        monkeypatch.setattr(app.messagebox, dialog, lambda *a, **k: True)
+    monkeypatch.setattr(app.messagebox, "showerror", lambda *a, **k: None)
+    monkeypatch.setattr(app.simpledialog, "askstring", lambda *a, **k: "小明的副本")
+    open_contact(chat, "小红")
+    open_contact_with_history(chat, "小明", "在吗")
+    chat.prompt_text.insert("1.0", "新的提示词")
+    chat.reply_count_var.set("")  # mid-retype
+
+    action(chat)
+
+    assert chat.prompt_text.get("1.0", tk.END).startswith("新的提示词")
+    assert len(chat.contact_data["history"]) == 1
+
+
+def test_a_failed_reply_log_keeps_the_manual_reply_text(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "showerror", lambda *a, **k: None)
+    open_contact(chat, "小明")
+    chat.reply_count_var.set("")
+    chat.manual_reply_text.insert("1.0", "好的")
+
+    chat.send_manual_reply()
+
+    assert chat.manual_reply_text.get("1.0", tk.END).strip() == "好的"
+
+
+def test_copy_puts_the_suggestion_on_the_clipboard_and_logs_it(chat):
+    open_contact(chat, "小明")
+
+    chat.copy_and_log("好的")
+
+    assert chat.clipboard_get() == "好的"
+    assert data_manager.load_contact_data("小明")["history"] == [{"role": "assistant", "content": "好的"}]
+
+
+def test_clicking_the_open_contact_again_keeps_the_suggestions(chat):
+    open_contact(chat, "小明")
+    chat.display_suggestions(["好呀"])
+
+    select(chat, "小明")
+
+    assert chat.suggestions_container.winfo_children()

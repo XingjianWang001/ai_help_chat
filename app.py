@@ -3,8 +3,6 @@ import threading
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox, Text, Frame, Label, Button, Entry, StringVar, OptionMenu, Scale
 
-import pyperclip
-
 import ai_handler
 import data_manager
 
@@ -168,6 +166,7 @@ class ChatMateApp(tk.Tk):
             # stay on the contact being left so its unsaved edits can be fixed instead of lost
             return self.reselect_current_contact()
         name = self.contacts_listbox.get(selection[0])
+        if name == self.current_contact and self.contact_data: return  # a re-click: keep the suggestions on screen
         data = data_manager.load_contact_data(name)
         if data is None:
             messagebox.showerror("错误", f"无法读取好友 '{name}' 的数据，文件可能已损坏。")
@@ -351,9 +350,9 @@ class ChatMateApp(tk.Tk):
         for widget in self.suggestions_container.winfo_children(): widget.destroy()
 
     def copy_and_log(self, suggestion):
-        pyperclip.copy(suggestion)
+        self.clipboard_clear()  # Tk's own clipboard: pyperclip needs xclip/xsel on Linux
+        self.clipboard_append(suggestion)
         self.log_assistant_reply(suggestion)
-        self.clear_suggestions()
 
     def undo_last_entry(self):
         if self.busy or not self.contact_data or not self.contact_data["history"]: return
@@ -365,21 +364,19 @@ class ChatMateApp(tk.Tk):
         if not self.save_contact():
             self.contact_data["history"].append(last)
             return
-        self.clear_suggestions()
         self.update_ui_for_contact()
 
     def send_manual_reply(self):
         reply_text = self.manual_reply_text.get("1.0", tk.END).strip()
         if not reply_text or not self.contact_data: return
-        self.log_assistant_reply(reply_text)
-        self.manual_reply_text.delete("1.0", tk.END)
-        self.clear_suggestions()
+        if self.log_assistant_reply(reply_text): self.manual_reply_text.delete("1.0", tk.END)
 
     def log_assistant_reply(self, reply_content):
-        self.save_settings()  # no early return on failure: callers discard the reply afterwards
+        if not self.save_settings(): return False  # update_ui_for_contact would drop the unsaved edits
         self.contact_data["history"].append({"role": "assistant", "content": reply_content})
         self.save_contact()
         self.update_ui_for_contact()
+        return True
 
     def open_global_settings(self):
         # A second window would save its own stale copy over the first one's changes.
