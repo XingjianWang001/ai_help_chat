@@ -67,13 +67,13 @@ def test_failed_save_keeps_previous_file(contacts_dir, monkeypatch):
     # a history entry the app can't show: never load it, or the next save rewrites the file around it
     '{"history": [{"role": "user", "text": "旧格式"}]}'.encode(), b'{"history": ["hi"]}',
 ])
-def test_unreadable_or_non_object_file_loads_as_none(contacts_dir, content):
+def test_unreadable_or_unshowable_file_loads_as_none(contacts_dir, content):
     (contacts_dir / "小明.json").write_bytes(content)
 
     assert data_manager.load_contact_data("小明") is None
 
 
-def test_null_fields_load_as_defaults(contacts_dir):
+def test_missing_or_wrong_type_fields_load_as_defaults(contacts_dir):
     (contacts_dir / "小明.json").write_text(
         '{"history": null, "settings": null, "prompt": null, "topic_starter_prompt": 1}', encoding="utf-8")
 

@@ -162,11 +162,11 @@ class ChatMateApp(tk.Tk):
     def on_contact_select(self, event):
         selection = self.contacts_listbox.curselection()
         if not selection: return
+        name = self.contacts_listbox.get(selection[0])
+        if name == self.current_contact and self.contact_data: return  # a re-click: keep the suggestions on screen
         if self.contact_data and not self.save_settings():
             # stay on the contact being left so its unsaved edits can be fixed instead of lost
             return self.reselect_current_contact()
-        name = self.contacts_listbox.get(selection[0])
-        if name == self.current_contact and self.contact_data: return  # a re-click: keep the suggestions on screen
         data = data_manager.load_contact_data(name)
         if data is None:
             messagebox.showerror("错误", f"无法读取好友 '{name}' 的数据，文件可能已损坏。")
@@ -350,9 +350,9 @@ class ChatMateApp(tk.Tk):
         for widget in self.suggestions_container.winfo_children(): widget.destroy()
 
     def copy_and_log(self, suggestion):
-        self.clipboard_clear()  # Tk's own clipboard: pyperclip needs xclip/xsel on Linux
-        self.clipboard_append(suggestion)
-        self.log_assistant_reply(suggestion)
+        if self.log_assistant_reply(suggestion):
+            self.clipboard_clear()  # Tk's clipboard needs no xclip/xsel on Linux
+            self.clipboard_append(suggestion)
 
     def undo_last_entry(self):
         if self.busy or not self.contact_data or not self.contact_data["history"]: return

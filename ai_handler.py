@@ -57,7 +57,8 @@ def load_app_config():
     API_KEY = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key")
     if API_KEY == "YOUR_API_KEY_HERE":
         API_KEY = None
-    GLOBAL_PROMPT = config.get("global_prompt") or ""
+    GLOBAL_PROMPT = config.get("global_prompt")
+    if not isinstance(GLOBAL_PROMPT, str): GLOBAL_PROMPT = ""  # hand-edited null or number
     MODEL_NAME = config.get("model_name") or DEFAULT_MODEL
 
 
@@ -74,8 +75,8 @@ def save_app_config(model_name, global_prompt):
     tmp_path = CONFIG_FILE + ".tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
+            if os.path.exists(CONFIG_FILE): shutil.copymode(CONFIG_FILE, tmp_path)  # keep a chmod 600, before the key is written
             json.dump(config, f, ensure_ascii=False, indent=2)
-        if os.path.exists(CONFIG_FILE): shutil.copymode(CONFIG_FILE, tmp_path)  # keep a chmod 600 on the API key
         os.replace(tmp_path, CONFIG_FILE)
     finally:
         if os.path.exists(tmp_path):
@@ -142,7 +143,7 @@ def _generate(system_instruction, contents, settings):
     """
     client = _client()
     model_name = settings.get("model_name") or MODEL_NAME
-    reply_count = min(max(1, int(settings.get("reply_count", 3))), 8)  # each missing reply is a parallel request
+    reply_count = min(max(1, int(settings.get("reply_count", 3))), 8)  # up to one request per reply
     temperature = float(settings.get("temperature", 0.7))
 
     def request(n):
@@ -155,7 +156,7 @@ def _generate(system_instruction, contents, settings):
         return _extract_texts(response)
 
     print(f"正在请求 Gemini API (模型: {model_name}, 数量: {reply_count}, 创造力: {temperature})...")
-    texts, sent = [], 0
+    texts = []
     if reply_count > 1 and model_name not in _single_candidate_models:
         try:
             return request(reply_count)  # the model takes candidate_count: fewer or no replies (blocked) is the answer
@@ -165,11 +166,12 @@ def _generate(system_instruction, contents, settings):
             if e.code != 400:
                 raise
             # A bad key or prompt is also a 400; only a single-candidate request that works blames candidate_count.
-            texts, sent = request(1), 1
+            texts = request(1)
             print(f"多候选请求失败，改为逐条请求: {e!r}")
             _single_candidate_models.add(model_name)
+            if not texts: return []  # the prompt was blocked: the other single requests would be too
 
-    missing = reply_count - sent  # count requests, not replies: a blocked prompt returns none
+    missing = reply_count - len(texts)
     if missing > 0:
         with ThreadPoolExecutor(max_workers=missing) as pool:
             futures = [pool.submit(request, 1) for _ in range(missing)]

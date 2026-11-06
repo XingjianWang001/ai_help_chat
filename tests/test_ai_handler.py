@@ -8,25 +8,26 @@ import ai_handler
 
 class FakeModels:
     """A candidate_count > 1 request raises `multi` if it is an error, else returns `multi` replies
-    (0: the prompt was blocked, so there are no candidates); single-candidate requests return one."""
+    (0: the prompt was blocked, so there are no candidates); single-candidate requests return `single`."""
 
-    def __init__(self, multi):
-        self.multi = multi
+    def __init__(self, multi, single=1):
+        self.multi, self.single = multi, single
         self.candidate_counts = []
 
     def generate_content(self, model, contents, config):
         self.candidate_counts.append(config.candidate_count)
-        replies = 1 if config.candidate_count == 1 else self.multi
+        replies = self.single if config.candidate_count == 1 else self.multi
         if isinstance(replies, Exception):
             raise replies
         content = types.Content(role="model", parts=[types.Part(text="好呀")])
-        return types.GenerateContentResponse(candidates=[types.Candidate(content=content)] * replies or None)
+        candidates = [types.Candidate(content=content)] * replies
+        return types.GenerateContentResponse(candidates=candidates or None)  # a blocked prompt has no candidates
 
 
 @pytest.fixture
 def fake_client(monkeypatch):
-    def install(multi_error):
-        models = FakeModels(multi_error)
+    def install(multi, single=1):
+        models = FakeModels(multi, single)
         monkeypatch.setattr(ai_handler, "_client", lambda: type("Client", (), {"models": models})())
         monkeypatch.setattr(ai_handler, "_single_candidate_models", set())
         return models
@@ -54,22 +55,21 @@ def test_rate_limit_is_reported_without_extra_requests(fake_client):
     assert "m" not in ai_handler._single_candidate_models
 
 
-# One click must cost at most one request per reply asked for, whatever the first answer was (PR #2, #10).
-@pytest.mark.parametrize("multi, requests", [
-    (3, [3]),
-    (1, [3]),  # some candidates were filtered out
-    (0, [3]),  # the prompt was blocked: single requests would be blocked too
-    (api_error(400, "INVALID_ARGUMENT"), [3, 1, 1, 1]),
-    (api_error(429, "RESOURCE_EXHAUSTED"), [3]),
-], ids=["full", "partial", "blocked", "candidate_count rejected", "rate limited"])
-def test_one_click_sends_at_most_one_request_per_reply(fake_client, multi, requests):
+# A model that takes candidate_count answers in one request, however few replies come back;
+# the 400 and 429 answers are covered above.
+@pytest.mark.parametrize("multi", [3, 1, 0], ids=["full", "some candidates filtered", "prompt blocked"])
+def test_an_answered_candidate_count_request_is_the_only_request(fake_client, multi):
     models = fake_client(multi)
 
-    try:
-        ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"})
-    except errors.ClientError:
-        pass
-    assert models.candidate_counts == requests
+    assert ai_handler._generate("sys", [], {"reply_count": 3, "model_name": "m"}) == ["好呀"] * multi
+    assert models.candidate_counts == [3]
+
+
+def test_a_blocked_prompt_stops_the_single_request_fallback(fake_client):
+    models = fake_client(api_error(400, "INVALID_ARGUMENT"), single=0)
+
+    assert ai_handler._generate("sys", [], {"reply_count": 8, "model_name": "m"}) == []
+    assert models.candidate_counts == [8, 1]
 
 
 @pytest.mark.parametrize("reply_count, expected", [(0, 1), (50, 8)])

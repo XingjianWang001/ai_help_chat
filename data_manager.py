@@ -54,7 +54,7 @@ def load_contact_data(contact_name):
     if not isinstance(data, dict):
         print(f"读取 {contact_name} 的数据时出错: 文件内容不是 JSON 对象")
         return None
-    # Older or hand-edited contact files may lack some keys.
+    # Older or hand-edited contact files may lack some keys or hold the wrong types.
     if not isinstance(data.get("prompt"), str): data["prompt"] = DEFAULT_PROMPT
     if not isinstance(data.get("topic_starter_prompt"), str): data["topic_starter_prompt"] = DEFAULT_TOPIC_STARTER_PROMPT
     if not isinstance(data.get("settings"), dict): data["settings"] = {}

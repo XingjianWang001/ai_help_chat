@@ -137,14 +137,24 @@ def test_undo_keeps_the_entry_when_the_save_fails(chat, monkeypatch):
     assert [m["content"] for m in chat.contact_data["history"]] == ["在吗"]
 
 
+def send(chat):
+    chat.input_entry.insert(0, "在吗")
+    chat.send_message()
+
+
+def send_manual_reply(chat):
+    chat.manual_reply_text.insert("1.0", "好的")
+    chat.send_manual_reply()
+
+
 # Every action that ends in update_ui_for_contact must save the edits first, or stop when it can't.
 ACTIONS = {
     "switch contact": lambda chat: select(chat, "小红"),
     "duplicate": lambda chat: chat.duplicate_contact(),
-    "send": lambda chat: (chat.input_entry.insert(0, "在吗"), chat.send_message()),
+    "send": send,
     "topic starters": lambda chat: chat.get_topic_starters(),
     "copy a suggestion": lambda chat: chat.copy_and_log("好的"),
-    "manual reply": lambda chat: (chat.manual_reply_text.insert("1.0", "好的"), chat.send_manual_reply()),
+    "manual reply": send_manual_reply,
     "undo": lambda chat: chat.undo_last_entry(),
     "close": lambda chat: chat.on_close(),
 }
@@ -187,10 +197,14 @@ def test_copy_puts_the_suggestion_on_the_clipboard_and_logs_it(chat):
     assert data_manager.load_contact_data("小明")["history"] == [{"role": "assistant", "content": "好的"}]
 
 
-def test_clicking_the_open_contact_again_keeps_the_suggestions(chat):
+def test_clicking_the_open_contact_again_keeps_the_suggestions(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "showerror", lambda *a, **k: pytest.fail("a re-click saved"))
     open_contact(chat, "小明")
     chat.display_suggestions(["好呀"])
+    chat.reply_count_var.set("")  # a save would fail now
 
     select(chat, "小明")
 
-    assert chat.suggestions_container.winfo_children()
+    shown = [w.get("1.0", "end-1c") for frame in chat.suggestions_container.winfo_children()
+             for w in frame.winfo_children() if isinstance(w, tk.Text)]
+    assert shown == ["好呀"]
