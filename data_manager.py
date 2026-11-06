@@ -46,7 +46,7 @@ def load_contact_data(contact_name):
         return None
     
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:  # -sig: Notepad may add a BOM
             data = json.load(f)
     except (ValueError, OSError) as e:  # ValueError covers bad JSON and non-UTF-8 files
         print(f"读取 {contact_name} 的数据时出错: {e}")
@@ -54,11 +54,15 @@ def load_contact_data(contact_name):
     if not isinstance(data, dict):
         print(f"读取 {contact_name} 的数据时出错: 文件内容不是 JSON 对象")
         return None
-    # Older contact files may lack some keys.
-    data.setdefault("prompt", DEFAULT_PROMPT)
-    data.setdefault("topic_starter_prompt", DEFAULT_TOPIC_STARTER_PROMPT)
+    # Older or hand-edited contact files may lack some keys or hold the wrong types.
+    if not isinstance(data.get("prompt"), str): data["prompt"] = DEFAULT_PROMPT
+    if not isinstance(data.get("topic_starter_prompt"), str): data["topic_starter_prompt"] = DEFAULT_TOPIC_STARTER_PROMPT
     if not isinstance(data.get("settings"), dict): data["settings"] = {}
     if not isinstance(data.get("history"), list): data["history"] = []
+    if not all(isinstance(m, dict) and isinstance(m.get("role"), str) and isinstance(m.get("content"), str)
+               for m in data["history"]):
+        print(f"读取 {contact_name} 的数据时出错: 聊天记录里有无法显示的条目")
+        return None  # not loaded, so a save can never rewrite the file around the bad entry
     return data
 def save_contact_data(contact_name, data):
     """将好友数据保存到其 .json 文件中。"""

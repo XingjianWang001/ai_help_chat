@@ -1,6 +1,7 @@
 """Gemini API access: configuration, model discovery and reply generation."""
 import json
 import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
@@ -56,7 +57,8 @@ def load_app_config():
     API_KEY = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key")
     if API_KEY == "YOUR_API_KEY_HERE":
         API_KEY = None
-    GLOBAL_PROMPT = config.get("global_prompt", "")
+    GLOBAL_PROMPT = config.get("global_prompt")
+    if not isinstance(GLOBAL_PROMPT, str): GLOBAL_PROMPT = ""  # hand-edited null or number
     MODEL_NAME = config.get("model_name") or DEFAULT_MODEL
 
 
@@ -73,6 +75,7 @@ def save_app_config(model_name, global_prompt):
     tmp_path = CONFIG_FILE + ".tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
+            if os.path.exists(CONFIG_FILE): shutil.copymode(CONFIG_FILE, tmp_path)  # keep a chmod 600, before the key is written
             json.dump(config, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, CONFIG_FILE)
     finally:
@@ -135,12 +138,12 @@ def _extract_texts(response):
 def _generate(system_instruction, contents, settings):
     """Ask Gemini for `reply_count` alternative replies.
 
-    Some models reject candidate_count > 1, so missing candidates are filled in
-    with parallel single-candidate requests.
+    Some models reject candidate_count > 1; for those the replies come from
+    parallel single-candidate requests.
     """
     client = _client()
     model_name = settings.get("model_name") or MODEL_NAME
-    reply_count = min(max(1, int(settings.get("reply_count", 3))), 8)  # each missing reply is a parallel request
+    reply_count = min(max(1, int(settings.get("reply_count", 3))), 8)  # up to one request per reply
     temperature = float(settings.get("temperature", 0.7))
 
     def request(n):
@@ -156,7 +159,7 @@ def _generate(system_instruction, contents, settings):
     texts = []
     if reply_count > 1 and model_name not in _single_candidate_models:
         try:
-            texts = request(reply_count)
+            return request(reply_count)  # the model takes candidate_count: fewer or no replies (blocked) is the answer
         except errors.ClientError as e:
             # Only a rejected request (400) means the model can't do candidate_count > 1;
             # retrying a quota error (429) as several requests would only make it worse.
@@ -166,6 +169,7 @@ def _generate(system_instruction, contents, settings):
             texts = request(1)
             print(f"多候选请求失败，改为逐条请求: {e!r}")
             _single_candidate_models.add(model_name)
+            if not texts: return []  # the prompt was blocked: the other single requests would be too
 
     missing = reply_count - len(texts)
     if missing > 0:
