@@ -62,16 +62,29 @@ def test_failed_save_keeps_previous_file(contacts_dir, monkeypatch):
     assert [p.name for p in contacts_dir.iterdir()] == ["小明.json"]
 
 
-@pytest.mark.parametrize("content", [b"\xff\xfe not utf-8", b"[]", b"null", b'"text"'])
+@pytest.mark.parametrize("content", [
+    b"\xff\xfe not utf-8", b"[]", b"null", b'"text"',
+    # a history entry the app can't show: never load it, or the next save rewrites the file around it
+    '{"history": [{"role": "user", "text": "旧格式"}]}'.encode(), b'{"history": ["hi"]}',
+])
 def test_unreadable_or_non_object_file_loads_as_none(contacts_dir, content):
     (contacts_dir / "小明.json").write_bytes(content)
 
     assert data_manager.load_contact_data("小明") is None
 
 
-def test_null_history_and_settings_load_as_empty(contacts_dir):
-    (contacts_dir / "小明.json").write_text('{"history": null, "settings": null}', encoding="utf-8")
+def test_null_fields_load_as_defaults(contacts_dir):
+    (contacts_dir / "小明.json").write_text(
+        '{"history": null, "settings": null, "prompt": null, "topic_starter_prompt": 1}', encoding="utf-8")
 
     data = data_manager.load_contact_data("小明")
 
     assert data["history"] == [] and data["settings"] == {}
+    assert data["prompt"] == data_manager.DEFAULT_PROMPT
+    assert data["topic_starter_prompt"] == data_manager.DEFAULT_TOPIC_STARTER_PROMPT
+
+
+def test_contact_saved_with_a_bom_loads(contacts_dir):  # older Windows Notepad adds one
+    (contacts_dir / "小明.json").write_bytes('{"prompt": "老朋友"}'.encode("utf-8-sig"))
+
+    assert data_manager.load_contact_data("小明")["prompt"] == "老朋友"
