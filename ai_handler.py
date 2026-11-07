@@ -1,11 +1,12 @@
 """Gemini API access: configuration, model discovery and reply generation."""
 import json
 import os
-import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
 from google.genai import errors, types
+
+import data_manager
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
@@ -68,19 +69,11 @@ def save_app_config(model_name, global_prompt):
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
             config = json.load(f)
+    if not isinstance(config, dict): config = {}  # [] or null: nothing to keep, as load_app_config treats it
     config.setdefault("gemini_api_key", "YOUR_API_KEY_HERE")
     config["model_name"] = model_name
     config["global_prompt"] = global_prompt
-    # Write a temp file and swap it in, so a failed write never truncates the API key.
-    tmp_path = CONFIG_FILE + ".tmp"
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            if os.path.exists(CONFIG_FILE): shutil.copymode(CONFIG_FILE, tmp_path)  # keep a chmod 600, before the key is written
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, CONFIG_FILE)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    data_manager.write_json_file(CONFIG_FILE, config)
     load_app_config()
 
 

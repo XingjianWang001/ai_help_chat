@@ -208,3 +208,31 @@ def test_clicking_the_open_contact_again_keeps_the_suggestions(chat, monkeypatch
     shown = [w.get("1.0", "end-1c") for frame in chat.suggestions_container.winfo_children()
              for w in frame.winfo_children() if isinstance(w, tk.Text)]
     assert shown == ["好呀"]
+
+
+def test_close_asks_about_a_message_whose_save_failed(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "showerror", lambda *a, **k: None)
+    asked = []
+    monkeypatch.setattr(app.messagebox, "askyesnocancel", lambda *a, **k: asked.append(a) or None)
+    open_contact(chat, "小明")
+    real_save = data_manager.save_contact_data
+    # The settings save works, the history save right after it fails (disk full, file locked).
+    monkeypatch.setattr(data_manager, "save_contact_data", lambda name, data: not data["history"] and real_save(name, data))
+    monkeypatch.setattr(chat, "request_suggestions", lambda *a: None)
+    send(chat)
+
+    chat.on_close()  # cancelled, so the window stays open
+
+    assert asked
+    assert chat.winfo_exists()
+
+
+def test_a_failing_ui_callback_does_not_stop_later_ones(chat, monkeypatch):
+    scheduled = []
+    monkeypatch.setattr(chat, "after", lambda ms, fn: scheduled.append(fn))
+    chat.ui_queue.put(lambda: 1 / 0)
+
+    with pytest.raises(ZeroDivisionError):  # Tk reports it; the next poll must still be scheduled
+        chat.poll_ui_queue()
+
+    assert scheduled == [chat.poll_ui_queue]

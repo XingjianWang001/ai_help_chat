@@ -184,6 +184,21 @@ def test_saving_keeps_a_private_config_private(config_file):
     assert config_file.stat().st_mode & 0o777 == 0o600
 
 
+def test_first_config_save_is_private(config_file):
+    ai_handler.save_app_config("gemini-3.8-flash", "新的人设")
+
+    assert config_file.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("content", ["[]", "null", '"key"'])
+def test_config_that_is_not_an_object_can_still_be_saved(config_file, content):
+    config_file.write_text(content, encoding="utf-8")
+
+    ai_handler.save_app_config("gemini-3.8-flash", "新的人设")
+
+    assert ai_handler.MODEL_NAME == "gemini-3.8-flash"
+
+
 def test_null_global_prompt_reads_as_empty(config_file):
     config_file.write_text(json.dumps({**CONFIG, "global_prompt": None}), encoding="utf-8")
 
