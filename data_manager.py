@@ -64,20 +64,36 @@ def load_contact_data(contact_name):
         print(f"读取 {contact_name} 的数据时出错: 聊天记录里有无法显示的条目")
         return None  # not loaded, so a save can never rewrite the file around the bad entry
     return data
-def save_contact_data(contact_name, data):
-    """将好友数据保存到其 .json 文件中。"""
-    filepath = get_contact_path(contact_name)
-    # Write a temp file and swap it in, so a failed or interrupted write never truncates the history.
+def write_json_file(filepath, data):
+    """Atomically replace filepath with data as JSON; the only way this app writes a file.
+
+    The temp file is created with the target's permissions (0600 for a new file) before any byte
+    is written, so a chmod 600 on config.json or a contact file survives every save.
+    """
+    # Write a temp file and swap it in, so a failed or interrupted write never truncates the old file.
     tmp_path = filepath + ".tmp"
     try:
-        with open(tmp_path, 'w', encoding='utf-8') as f:
+        mode = os.stat(filepath).st_mode & 0o777
+    except FileNotFoundError:
+        mode = 0o600  # API key and private chat history: readable by this user only
+    try:
+        if os.path.exists(tmp_path): os.remove(tmp_path)  # O_CREAT keeps a leftover's mode
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        with open(fd, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, filepath)
-        return True
-    except IOError as e:
-        print(f"保存 {contact_name} 的数据时出错: {e}")
+    finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def save_contact_data(contact_name, data):
+    """将好友数据保存到其 .json 文件中。"""
+    try:
+        write_json_file(get_contact_path(contact_name), data)
+        return True
+    except OSError as e:
+        print(f"保存 {contact_name} 的数据时出错: {e}")
         return False
 
 def create_new_contact(contact_name):

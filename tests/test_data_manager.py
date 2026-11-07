@@ -88,3 +88,14 @@ def test_contact_saved_with_a_bom_loads(contacts_dir):  # older Windows Notepad 
     (contacts_dir / "小明.json").write_bytes('{"prompt": "老朋友"}'.encode("utf-8-sig"))
 
     assert data_manager.load_contact_data("小明")["prompt"] == "老朋友"
+
+
+def test_saving_keeps_a_private_contact_private(contacts_dir):
+    data_manager.create_new_contact("小明")
+    path = contacts_dir / "小明.json"
+    assert path.stat().st_mode & 0o777 == 0o600  # a new file holds chat history: owner only
+    path.chmod(0o640)
+
+    data_manager.save_contact_data("小明", data_manager.load_contact_data("小明"))
+
+    assert path.stat().st_mode & 0o777 == 0o640  # a mode the user chose is kept

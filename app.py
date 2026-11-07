@@ -118,13 +118,15 @@ class ChatMateApp(tk.Tk):
         self.poll_ui_queue()
 
     def poll_ui_queue(self):
-        while True:
-            try:
-                callback = self.ui_queue.get_nowait()
-            except queue.Empty:
-                break
-            callback()
-        self.after(100, self.poll_ui_queue)
+        try:
+            while True:
+                try:
+                    callback = self.ui_queue.get_nowait()
+                except queue.Empty:
+                    break
+                callback()
+        finally:
+            self.after(100, self.poll_ui_queue)  # one failing callback must not stop every later reply
 
     def _fetch_models(self):
         models = ai_handler.fetch_available_models()
@@ -253,7 +255,8 @@ class ChatMateApp(tk.Tk):
             values = self.ui_values()
         except Exception:
             return True  # unparsable input is an edit the user should be asked about
-        return values != {k: self.contact_data[k] for k in values}
+        # Against the file, not memory: a history entry whose save failed is unsaved too.
+        return {**self.contact_data, **values} != data_manager.load_contact_data(self.current_contact)
 
     def on_close(self):
         if self.contact_data and self.has_unsaved_changes():
