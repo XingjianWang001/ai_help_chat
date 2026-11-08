@@ -99,3 +99,15 @@ def test_saving_keeps_a_private_contact_private(contacts_dir):
     data_manager.save_contact_data("小明", data_manager.load_contact_data("小明"))
 
     assert path.stat().st_mode & 0o777 == 0o640  # a mode the user chose is kept
+
+
+def test_saving_through_a_symlink_updates_the_linked_file(tmp_path, contacts_dir):
+    synced = tmp_path / "synced.json"  # e.g. a file kept in a cloud folder
+    synced.write_text("{}", encoding="utf-8")
+    link = tmp_path / "config.json"
+    link.symlink_to(synced)
+
+    data_manager.write_json_file(str(link), {"model_name": "m"})
+
+    assert link.is_symlink()
+    assert synced.read_text(encoding="utf-8") == '{\n  "model_name": "m"\n}'
