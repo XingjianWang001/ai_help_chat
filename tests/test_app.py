@@ -227,6 +227,56 @@ def test_close_asks_about_a_message_whose_save_failed(chat, monkeypatch):
     assert chat.winfo_exists()
 
 
+def edit_global_prompt(chat):
+    chat.open_global_settings()
+    chat.settings_window.prompt_text.insert("1.0", "我是一名大学生")
+
+
+def edit_global_model(chat):
+    chat.open_global_settings()
+    chat.settings_window.model_var.set(NEW_DEFAULT)
+
+
+# Every window that edits something must ask before the app closes over its edits.
+EDITS = {
+    "contact prompt": lambda chat: chat.prompt_text.insert("1.0", "新的提示词"),
+    "global prompt": edit_global_prompt,
+    "global model": edit_global_model,
+}
+
+
+@pytest.mark.parametrize("edit", EDITS.values(), ids=EDITS.keys())
+def test_close_asks_about_every_unsaved_edit(chat, monkeypatch, edit):
+    asked = []
+    monkeypatch.setattr(app.messagebox, "askyesnocancel", lambda *a, **k: asked.append(a) or None)
+    open_contact(chat, "小明")
+    edit(chat)
+
+    chat.on_close()  # cancelled, so the window stays open
+
+    assert asked
+    assert chat.winfo_exists()
+
+
+def test_closing_the_global_settings_window_can_save_its_edits(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "askyesnocancel", lambda *a, **k: True)
+    edit_global_prompt(chat)
+
+    chat.settings_window.on_close()
+
+    assert ai_handler.GLOBAL_PROMPT == "我是一名大学生"
+    assert not chat.settings_window.winfo_exists()
+
+
+def test_closing_unedited_global_settings_does_not_ask(chat, monkeypatch):
+    monkeypatch.setattr(app.messagebox, "askyesnocancel", lambda *a, **k: pytest.fail("asked"))
+    chat.open_global_settings()
+
+    chat.settings_window.on_close()
+
+    assert not chat.settings_window.winfo_exists()
+
+
 def test_a_failing_ui_callback_does_not_stop_later_ones(chat, monkeypatch):
     scheduled = []
     monkeypatch.setattr(chat, "after", lambda ms, fn: scheduled.append(fn))

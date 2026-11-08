@@ -68,8 +68,10 @@ def test_an_answered_candidate_count_request_is_the_only_request(fake_client, mu
 def test_a_blocked_prompt_stops_the_single_request_fallback(fake_client):
     models = fake_client(api_error(400, "INVALID_ARGUMENT"), single=0)
 
-    assert ai_handler._generate("sys", [], {"reply_count": 8, "model_name": "m"}) == []
-    assert models.candidate_counts == [8, 1]
+    for expected in ([8, 1], [1], [1]):  # the first click finds out the model needs single requests
+        models.candidate_counts = []
+        assert ai_handler._generate("sys", [], {"reply_count": 8, "model_name": "m"}) == []
+        assert models.candidate_counts == expected
 
 
 @pytest.mark.parametrize("reply_count, expected", [(0, 1), (50, 8)])
@@ -81,21 +83,23 @@ def test_reply_count_is_clamped_to_1_to_8(fake_client, reply_count, expected):
 
 
 class FlakySingleModels(FakeModels):
-    """Like FakeModels, but the first `failures` single-candidate requests raise."""
+    """Like FakeModels, but after the first `after` single-candidate requests, the next `failures` raise."""
 
-    def __init__(self, failures):
+    def __init__(self, failures, after=0):
         super().__init__(api_error(400, "INVALID_ARGUMENT"))
-        self.failures = failures
+        self.failures, self.after = failures, after
 
     def generate_content(self, model, contents, config):
-        if config.candidate_count == 1 and self.failures > 0:
+        if config.candidate_count == 1 and self.after > 0:
+            self.after -= 1
+        elif config.candidate_count == 1 and self.failures > 0:
             self.failures -= 1
             raise api_error(503, "UNAVAILABLE")
         return super().generate_content(model, contents, config)
 
 
 def test_one_failed_single_request_keeps_the_other_replies(monkeypatch):
-    models = FlakySingleModels(failures=1)
+    models = FlakySingleModels(failures=1, after=1)  # the first request answered, so the rest were sent
     monkeypatch.setattr(ai_handler, "_client", lambda: type("Client", (), {"models": models})())
     monkeypatch.setattr(ai_handler, "_single_candidate_models", {"m"})
 

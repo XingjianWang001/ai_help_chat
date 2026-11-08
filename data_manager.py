@@ -70,6 +70,7 @@ def write_json_file(filepath, data):
     The temp file is created with the target's permissions (0600 for a new file) before any byte
     is written, so a chmod 600 on config.json or a contact file survives every save.
     """
+    filepath = os.path.realpath(filepath)  # replace a symlink's target (e.g. a synced file), not the link
     # Write a temp file and swap it in, so a failed or interrupted write never truncates the old file.
     tmp_path = filepath + ".tmp"
     try:
