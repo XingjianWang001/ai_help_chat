@@ -259,6 +259,9 @@ class ChatMateApp(tk.Tk):
         return {**self.contact_data, **values} != data_manager.load_contact_data(self.current_contact)
 
     def on_close(self):
+        if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.on_close()
+            if self.settings_window.winfo_exists(): return  # cancelled, or its save failed
         if self.contact_data and self.has_unsaved_changes():
             answer = messagebox.askyesnocancel("保存更改", f"是否保存对 '{self.current_contact}' 的更改？", parent=self)
             if answer is None: return
@@ -407,6 +410,15 @@ class GlobalSettingsWindow(tk.Toplevel):
         self.prompt_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.prompt_text.insert("1.0", ai_handler.GLOBAL_PROMPT)
         Button(self, text="保存全局设置", command=self.save_settings).pack(pady=10)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+    def has_unsaved_changes(self):
+        return (self.model_var.get(), self.prompt_text.get("1.0", tk.END).strip()) != (ai_handler.MODEL_NAME, ai_handler.GLOBAL_PROMPT)
+    def on_close(self):
+        if self.has_unsaved_changes():
+            answer = messagebox.askyesnocancel("保存更改", "是否保存对全局设置的更改？", parent=self)
+            if answer is None: return
+            if answer: return self.save_settings()  # closes the window only if the save works
+        self.destroy()
     def save_settings(self):
         try:
             ai_handler.save_app_config(self.model_var.get(), self.prompt_text.get("1.0", tk.END).strip())
