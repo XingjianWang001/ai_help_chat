@@ -149,7 +149,6 @@ def _generate(system_instruction, contents, settings):
         return _extract_texts(response)
 
     print(f"正在请求 Gemini API (模型: {model_name}, 数量: {reply_count}, 创造力: {temperature})...")
-    texts = []
     if reply_count > 1 and model_name not in _single_candidate_models:
         try:
             return request(reply_count)  # the model takes candidate_count: fewer or no replies (blocked) is the answer
@@ -158,12 +157,13 @@ def _generate(system_instruction, contents, settings):
             # retrying a quota error (429) as several requests would only make it worse.
             if e.code != 400:
                 raise
-            # A bad key or prompt is also a 400; only a single-candidate request that works blames candidate_count.
-            texts = request(1)
             print(f"多候选请求失败，改为逐条请求: {e!r}")
-            _single_candidate_models.add(model_name)
-            if not texts: return []  # the prompt was blocked: the other single requests would be too
 
+    # Single requests, on every click: one first, so a bad key or prompt (also a 400) raises here
+    # before candidate_count is blamed, and a blocked prompt costs one request, not reply_count.
+    texts = request(1)
+    if reply_count > 1: _single_candidate_models.add(model_name)
+    if not texts: return []  # the prompt was blocked: the other single requests would be too
     missing = reply_count - len(texts)
     if missing > 0:
         with ThreadPoolExecutor(max_workers=missing) as pool:
