@@ -306,7 +306,7 @@ class ChatMateApp(tk.Tk):
         context_len = self.contact_data["settings"]["context_lookback"]
         context = self.contact_data["history"][-max(1, context_len):]
         settings = dict(self.contact_data["settings"])
-        contact = self.current_contact
+        contact, history_len = self.current_contact, len(self.contact_data["history"])
 
         self.set_busy(True)
 
@@ -319,8 +319,8 @@ class ChatMateApp(tk.Tk):
 
         def finish(result, error):
             self.set_busy(False)
-            if contact != self.current_contact:
-                return  # user switched contacts while waiting
+            if contact != self.current_contact or len(self.contact_data["history"]) != history_len:
+                return  # user switched contacts or logged a reply while waiting: the suggestions are stale
             if error:
                 self.display_suggestions([], f"未能获取建议：{error}")
             else:
