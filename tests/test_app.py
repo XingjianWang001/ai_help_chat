@@ -286,3 +286,15 @@ def test_a_failing_ui_callback_does_not_stop_later_ones(chat, monkeypatch):
         chat.poll_ui_queue()
 
     assert scheduled == [chat.poll_ui_queue]
+
+
+def test_suggestions_that_arrive_after_a_manual_reply_are_not_shown(chat, monkeypatch):
+    monkeypatch.setattr(ai_handler, "get_reply_suggestions", lambda *a: ["好呀"])
+    open_contact(chat, "小明")
+    send(chat)
+    finish = chat.ui_queue.get(timeout=5)  # the reply request is answered, not yet shown
+
+    send_manual_reply(chat)  # meanwhile the user answers the friend himself
+    finish()
+
+    assert not any(isinstance(w, tk.Frame) for w in chat.suggestions_container.winfo_children())
