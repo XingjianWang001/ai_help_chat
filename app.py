@@ -141,6 +141,8 @@ class ChatMateApp(tk.Tk):
         set_option_menu_items(self.model_menu, self.model_var, [FOLLOW_DEFAULT, *self.MODELS])
         if self.model_var.get():
             self.model_var.set(self.resolve_model(self.model_var.get()))
+        if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.show_models(self.settings_window.model_var.get())  # it was built from the old list
 
     def resolve_model(self, model_name):
         """The contact's menu value: its pinned model, or FOLLOW_DEFAULT if none is pinned or the API no longer offers it."""
@@ -401,9 +403,10 @@ class GlobalSettingsWindow(tk.Toplevel):
         ai_handler.load_app_config()
         model_frame = Frame(self, pady=10)
         Label(model_frame, text="默认 Gemini 模型:").pack(side=tk.LEFT, padx=5)
-        offered = not controller.models_from_api or ai_handler.MODEL_NAME in controller.MODELS
-        self.model_var = StringVar(value=ai_handler.MODEL_NAME if offered else ai_handler.DEFAULT_MODEL)
-        OptionMenu(model_frame, self.model_var, *self.controller.MODELS).pack(side=tk.LEFT)
+        self.model_var = StringVar()
+        self.model_menu = OptionMenu(model_frame, self.model_var, "")
+        self.model_menu.pack(side=tk.LEFT)
+        self.show_models(ai_handler.MODEL_NAME)
         model_frame.pack(fill=tk.X, padx=10)
         Label(self, text="全局提示词 (定义你的通用人设):").pack(anchor=tk.W, padx=10)
         self.prompt_text = Text(self, wrap=tk.WORD)
@@ -411,6 +414,11 @@ class GlobalSettingsWindow(tk.Toplevel):
         self.prompt_text.insert("1.0", ai_handler.GLOBAL_PROMPT)
         Button(self, text="保存全局设置", command=self.save_settings).pack(pady=10)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+    def show_models(self, model):
+        """Offer the controller's model list, showing `model`, or DEFAULT_MODEL if the API doesn't offer it."""
+        set_option_menu_items(self.model_menu, self.model_var, self.controller.MODELS)
+        offered = not self.controller.models_from_api or model in self.controller.MODELS
+        self.model_var.set(model if offered else ai_handler.DEFAULT_MODEL)
     def has_unsaved_changes(self):
         return (self.model_var.get(), self.prompt_text.get("1.0", tk.END).strip()) != (ai_handler.MODEL_NAME, ai_handler.GLOBAL_PROMPT)
     def on_close(self):
