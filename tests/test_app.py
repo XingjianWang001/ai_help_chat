@@ -298,3 +298,18 @@ def test_suggestions_that_arrive_after_a_manual_reply_are_not_shown(chat, monkey
     finish()
 
     assert not any(isinstance(w, tk.Frame) for w in chat.suggestions_container.winfo_children())
+
+
+def menu_labels(option_menu):
+    menu = option_menu["menu"]
+    return [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)]
+
+
+def test_an_open_global_settings_window_gets_the_model_list_when_it_arrives(chat):
+    chat.open_global_settings()  # opened before the API list arrives: built from the fallback list
+    window = chat.settings_window
+
+    chat._apply_models([NEW_DEFAULT])  # the configured default (OLD_DEFAULT) is not offered
+
+    assert window.model_var.get() == ai_handler.DEFAULT_MODEL  # as if the window were opened now
+    assert menu_labels(window.model_menu) == [ai_handler.DEFAULT_MODEL, NEW_DEFAULT]
